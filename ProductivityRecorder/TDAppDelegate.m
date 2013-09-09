@@ -7,6 +7,8 @@
 //
 
 #import "TDAppDelegate.h"
+#import "AFHTTPClient.h"
+#import "AFHTTPRequestOperation.h"
 
 @implementation TDAppDelegate
 
@@ -47,43 +49,50 @@
     [startWorkingItem setHidden:YES];
     NSMenuItem *stopWorkingItem = [self.statusMenu itemWithTitle:@"Stop Working"];
     [stopWorkingItem setHidden:NO];
-    
-    
     NSMenuItem *logWorkItem = [self.statusMenu itemWithTitle:@"Log Work"];
-    [[logWorkItem view] setHidden:NO];
+    [[logWorkItem view] setHidden:NO];  
+    
+    NSLog(@"Date created: %@",[self stringFromDate:self.startDate]);
 }
 
 - (IBAction)stopWorking:(id)sender {
+    // gather data and send it to the server
+    
     NSDate *endTime = [NSDate date];
     
     NSTimeInterval interval = [endTime timeIntervalSinceDate:self.startDate];
-    
-    float minutesSpent = interval / 60;
-    
-    NSLog(@"%.02f Minutes Spent",minutesSpent);
+    float hoursSpent = interval / 60 / 60;
     
     NSMutableString *workCompleted = [NSMutableString stringWithFormat:@""];
     for (NSString *logEntry in self.loggedWork) {
         [workCompleted appendFormat:@"%@\n",logEntry];
     }
     
-    // now post this data to the web server!
-    /*
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"http://thomasdashney.com/selfProductivity/publishWorkSession.php"]];
-    [request setHTTPMethod:@"POST"];
-    [request setValue:@"text/xml" forHTTPHeaderField:@"Content-type"];
-    NSString *xmlString = @"<data><item>Item 1</item><item>Item 2</item></data>";
+    NSString *dateStarted = [self stringFromDate:self.startDate];
+    NSString *hoursWorked = [NSString stringWithFormat:@"%.02f",hoursSpent];
+    NSString *workLog = workCompleted;
     
-    NSURLResponse *response;
-    NSError *error;
-    NSData *returnData = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
-    [request setValue:[NSString stringWithFormat:@"%ld", (unsigned long)[xmlString length]] forHTTPHeaderField:@"Content-length"];
+    NSDictionary *postDict = @{@"date":dateStarted,@"hours":hoursWorked,@"workLog":self.loggedWork};
     
-    [request setHTTPBody:[xmlString dataUsingEncoding:NSUTF8StringEncoding]];
+    AFHTTPClient *httpClient = [[AFHTTPClient alloc] initWithBaseURL:[NSURL URLWithString:@"http://thomasdashney.com/selfProductivity"]];
+    NSMutableURLRequest *request = [httpClient requestWithMethod:@"POST" path:@"http://thomasdashney.com/selfProductivity/publishWorkSession.php" parameters:postDict];
+    AFHTTPRequestOperation *operation = [[AFHTTPRequestOperation alloc] initWithRequest:request];
+    [httpClient registerHTTPOperationClass:[AFHTTPRequestOperation class]];
+    [operation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
+        // Print the response body in text
+        NSLog(@"Response: %@", [[NSString alloc] initWithData:responseObject encoding:NSUTF8StringEncoding]);
+    } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
+        NSLog(@"Error: %@", error);
+    }];
+    [operation start];
     
-    NSString *returnString = [[NSString alloc] initWithData:returnData encoding:NSUTF8StringEncoding];
-    NSLog(@"%@",returnString);
-*/
+    // reset the menubar
+    NSMenuItem *stopWorkingItem = [self.statusMenu itemWithTitle:@"Stop Working"];
+    [stopWorkingItem setHidden:YES];
+    NSMenuItem *startWorkingItem = [self.statusMenu itemWithTitle:@"Start Working"];
+    [startWorkingItem setHidden:NO];
+    NSMenuItem *logWorkItem = [self.statusMenu itemWithTitle:@"Log Work"];
+    [[logWorkItem view] setHidden:YES];
 }
 
 - (IBAction)logWork:(id)sender {
@@ -91,6 +100,17 @@
     NSTextField *textField = (NSTextField *) [[[logButton superview] subviews] objectAtIndex:0];
     NSString *logEntry = textField.stringValue;
     [self.loggedWork insertObject:logEntry atIndex:self.loggedWork.count];
+}
+
+/* Quick helper to get the string from the date */
+- (NSString *)stringFromDate:(NSDate *)date {
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    [df setTimeStyle:NSDateFormatterNoStyle];
+    [df setDateStyle:NSDateFormatterFullStyle];
+    
+    NSLocale *canLocale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US"];
+    [df setLocale:canLocale];
+    return [df stringFromDate:self.startDate];
 }
 
 @end
